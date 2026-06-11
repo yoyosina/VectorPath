@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function ResumeUploader({ onSkillsExtracted }: { onSkillsExtracted: (skills: any[], userId: number) => void }) {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +24,7 @@ export default function ResumeUploader({ onSkillsExtracted }: { onSkillsExtracte
     formData.append("file", file);
 
     try {
-      const res = await fetch("http://localhost:8000/api/resume/parse", {
+      const res = await fetch(`${API_URL}/api/resume/parse`, {
         method: "POST",
         body: formData,
       });

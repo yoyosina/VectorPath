@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import ResumeUploader from "../components/ResumeUploader";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function JobEcosystem() {
   const [skills, setSkills] = useState<{name: string, confidence: string}[]>([]);
   const [userId, setUserId] = useState<number | null>(null);
@@ -18,7 +20,7 @@ export default function JobEcosystem() {
     let retries = 5;
     const fetchLatestUser = async () => {
       try {
-        const res = await fetch("http://localhost:8000/api/user/latest");
+        const res = await fetch(`${API_URL}/api/user/latest`);
         if (res.ok) {
           const data = await res.json();
           if (data.user_id && data.skills && data.skills.length > 0) {
@@ -46,7 +48,7 @@ export default function JobEcosystem() {
     if (!userId) return;
     const fetchMetrics = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/dashboard/metrics?user_id=${userId}`);
+        const res = await fetch(`${API_URL}/api/dashboard/metrics?user_id=${userId}`);
         if (res.ok) {
           setMetrics(await res.json());
         }
@@ -64,7 +66,7 @@ export default function JobEcosystem() {
     if (!userId) return;
     const pollStatus = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/daemon/status?user_id=${userId}`);
+        const res = await fetch(`${API_URL}/api/daemon/status?user_id=${userId}`);
         if (res.ok) {
           const data = await res.json();
           setDaemonStatus(data);
@@ -82,7 +84,7 @@ export default function JobEcosystem() {
     if (skills.length === 0 || !userId) return;
     setIsLoadingJobs(true);
     try {
-      const res = await fetch("http://localhost:8000/api/jobs/recommend", {
+      const res = await fetch(`${API_URL}/api/jobs/recommend`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, skills, skip: skipCount, limit: 10 }),
@@ -117,7 +119,7 @@ export default function JobEcosystem() {
 
   const handleApply = async (jobId: number) => {
     try {
-      await fetch("http://localhost:8000/api/jobs/apply", {
+      await fetch(`${API_URL}/api/jobs/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, job_id: jobId }),
