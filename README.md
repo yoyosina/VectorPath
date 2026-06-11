@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# VectorPath 🚀
 
-## Getting Started
+VectorPath is an autonomous, AI-driven job discovery and application tracking platform. It leverages advanced LLM ensembles (Groq Llama-3 + Google Gemini) to deeply analyze your resume, autonomously scour the web for remote job opportunities, and algorithmically score your exact match probability.
 
-First, run the development server:
+## 🌟 Key Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. **Intelligent Resume Vectorization**: Upload your PDF resume, and the LangGraph ensemble extracts your exact skill map and confidence levels.
+2. **Autonomous Web Scout Daemon**: A high-speed multi-threaded web scraper that constantly monitors DuckDuckGo for the latest remote jobs. It runs continuously via GitHub Actions or as a local Python daemon.
+3. **Dual-Model AI Matchmaker**: Every discovered job is pushed through a dual-LLM pipeline (Gemini + Groq) to calculate a deep semantic `match_score` against your specific skills.
+4. **Application Tracking Dashboard**: A beautiful, glassmorphism UI to track your entire job hunt funnel (Applied, Interviews, Offers, Upskilling).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🏗️ Architecture
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Frontend**: Next.js (React), TailwindCSS, TypeScript
+- **Backend**: FastAPI (Python), SQLAlchemy, LangGraph
+- **Database**: SQLite (Local) / Supabase (Cloud Ready)
+- **AI Models**: `llama-3.1-8b-instant` (Groq), `gemini-2.5-flash` (Google)
+- **Automation**: GitHub Actions (`scout.yml`)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🚀 Getting Started
 
-## Learn More
+### Prerequisites
+- Node.js 18+
+- Python 3.10+
+- Groq API Key
+- Google Gemini API Key
 
-To learn more about Next.js, take a look at the following resources:
+### Installation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yoyosina/VectorPath.git
+   cd VectorPath
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+2. **Setup Backend (FastAPI)**
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-## Deploy on Vercel
+3. **Configure Environment Variables**
+   Create a `.env` file in the `backend` directory:
+   ```env
+   GROQ_API_KEY=your_groq_key
+   GEMINI_API_KEY=your_gemini_key
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. **Run Backend Server**
+   ```bash
+   uvicorn app.main:app --reload --port 8000
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+5. **Setup Frontend (Next.js)**
+   ```bash
+   # Open a new terminal
+   npm install
+   npm run dev
+   ```
+
+6. **Open Dashboard**
+   Navigate to `http://localhost:3000` in your browser.
+
+## 🤖 GitHub Actions Setup
+To enable the free cloud-based Web Scout, simply add your `GROQ_API_KEY` to your GitHub Repository Secrets. The Action will automatically run every 15 minutes!
