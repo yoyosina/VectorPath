@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 from app.services.graph import agent_graph
 from app.services.state import GraphState
 from app.core.database import get_db
-from app.models.schema import User, JobTarget, DaemonStatus
+from app.models import schema
+from app.core.database import engine
 
-load_dotenv()
+schema.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="VectorPath API", version="0.1.0")
 
