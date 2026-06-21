@@ -126,8 +126,8 @@ export default function JobEcosystem() {
       });
       // Increment applied metric optimistically
       setMetrics(prev => ({ ...prev, applied: prev.applied + 1 }));
-      // Remove job from list
-      setJobs(prev => prev.filter(j => j.id !== jobId));
+      // Mark job as applied instead of removing it
+      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, applied: true } : j));
     } catch (err) {
       console.error("Failed to apply", err);
     }
@@ -271,10 +271,11 @@ export default function JobEcosystem() {
                   Ready to Autopilot
                 </div>
                 <button 
-                  onClick={() => handleApply(job.id)}
-                  className="px-4 py-2 bg-transparent border border-primary-fixed-dim text-primary-fixed-dim rounded hover:bg-primary-fixed-dim hover:text-black transition-colors font-label-md text-label-md"
+                  onClick={() => !job.applied && handleApply(job.id)}
+                  disabled={job.applied}
+                  className={`px-4 py-2 bg-transparent border border-primary-fixed-dim text-primary-fixed-dim rounded font-label-md text-label-md ${job.applied ? 'opacity-50 cursor-not-allowed bg-primary-fixed-dim/20' : 'hover:bg-primary-fixed-dim hover:text-black transition-colors'}`}
                 >
-                  Apply Now
+                  {job.applied ? "Applied ✓" : "Apply Now"}
                 </button>
               </div>
             </article>
