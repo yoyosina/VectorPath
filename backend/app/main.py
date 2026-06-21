@@ -8,7 +8,7 @@ from app.services.graph import agent_graph
 from app.services.state import GraphState
 from app.core.database import get_db
 from app.models import schema
-from app.models.schema import User
+from app.models.schema import User, JobTarget, DaemonStatus
 from app.core.database import engine
 
 from fastapi import FastAPI, Request, status
