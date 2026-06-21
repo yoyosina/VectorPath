@@ -80,9 +80,9 @@ export default function JobEcosystem() {
     return () => clearInterval(interval);
   }, [userId]);
 
-  const fetchJobs = async (skipCount: number, append: boolean = false) => {
+  const fetchJobs = async (skipCount: number, append: boolean = false, isPolling: boolean = false) => {
     if (skills.length === 0 || !userId) return;
-    setIsLoadingJobs(true);
+    if (!isPolling) setIsLoadingJobs(true);
     try {
       const res = await fetch(`${API_URL}/api/jobs/recommend`, {
         method: "POST",
@@ -100,7 +100,7 @@ export default function JobEcosystem() {
     } catch (err) {
       console.error("Failed to fetch jobs:", err);
     } finally {
-      setIsLoadingJobs(false);
+      if (!isPolling) setIsLoadingJobs(false);
     }
   };
 
@@ -110,12 +110,17 @@ export default function JobEcosystem() {
     }
   }, [skills, userId]);
 
-  // Auto-fetch jobs if daemon scraped them and we currently have 0 jobs
+  // Poll for new jobs every 15 seconds if we are on the first page
   useEffect(() => {
-    if (skills.length > 0 && userId && jobs.length === 0 && daemonStatus?.total_jobs_scraped > 0 && !isLoadingJobs) {
-      fetchJobs(0, false);
-    }
-  }, [daemonStatus?.total_jobs_scraped, skills, userId, jobs.length, isLoadingJobs]);
+    if (!userId || skills.length === 0 || skip !== 0) return;
+    
+    const interval = setInterval(() => {
+      // Background fetch without showing full page loader
+      fetchJobs(0, false, true);
+    }, 15000);
+    
+    return () => clearInterval(interval);
+  }, [userId, skills, skip]);
 
   const handleApply = async (jobId: number) => {
     try {

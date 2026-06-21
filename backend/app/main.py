@@ -153,7 +153,14 @@ def recommend_jobs(req: SkillsRequest, db: Session = Depends(get_db)):
         
     skills = [Skill(**s) for s in req.skills]
     
-    jobs_from_db = db.query(JobTarget).filter_by(user_id=req.user_id).order_by(JobTarget.tier1_score.desc()).offset(req.skip).limit(req.limit).all()
+    # Get IDs of jobs the user has already applied to
+    applied_job_ids = [app.job_id for app in db.query(JobApplication.job_id).filter_by(user_id=req.user_id).all()]
+    
+    query = db.query(JobTarget).filter_by(user_id=req.user_id)
+    if applied_job_ids:
+        query = query.filter(~JobTarget.id.in_(applied_job_ids))
+        
+    jobs_from_db = query.order_by(JobTarget.tier1_score.desc()).offset(req.skip).limit(req.limit).all()
     
     if not jobs_from_db:
         return {"jobs": []}
