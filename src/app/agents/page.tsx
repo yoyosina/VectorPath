@@ -1,4 +1,36 @@
+'use client';
+
+import React, { useEffect, useState, useRef } from "react";
+
+const API_URL = "https://vectorpath.onrender.com";
+
 export default function AgentClusterOversight() {
+  const [logs, setLogs] = useState<{level: string, message: string, timestamp: string}[]>([]);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const userId = localStorage.getItem("vp_user_id") || "2";
+        const res = await fetch(`${API_URL}/api/logs/latest?user_id=${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setLogs(data.logs || []);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -30,10 +62,22 @@ export default function AgentClusterOversight() {
         <div className="lg:col-span-4 glass-panel rounded-xl p-6 border-cyan-top flex flex-col gap-4">
           <h3 className="font-headline-md text-white">Active Logs</h3>
           <div className="flex-1 bg-[#020617] rounded-lg p-4 font-mono text-xs terminal-scroll overflow-y-auto border border-white/5 space-y-3 h-64">
-             <div className="text-primary-fixed-dim">[SYS] Initializing Cluster Manager...</div>
-             <div className="text-on-surface-variant"><span className="text-primary-fixed">[SCOUT]</span> Executing LinkedIn query for "Frontend"...</div>
-             <div className="text-secondary-fixed"><span className="text-secondary-fixed-dim">[MATCH]</span> Ranking complete. Best match: 94%.</div>
-             <div className="text-on-surface-variant"><span className="text-primary-container">[EXEC]</span> Completing Workday form for Requisition ID: #4492...</div>
+             {logs.length === 0 ? (
+               <div className="text-primary-fixed-dim animate-pulse">[SYS] Initializing Cluster Manager...</div>
+             ) : (
+               logs.map((log, idx) => (
+                 <div key={idx} className={
+                   log.level === 'ERROR' ? 'text-red-400' :
+                   log.level === 'SCOUT' ? 'text-cyan-300' :
+                   log.level === 'MATCH' ? 'text-green-400' :
+                   log.level === 'EXEC' ? 'text-purple-400' :
+                   'text-on-surface-variant'
+                 }>
+                   <span className="font-bold">[{log.level}]</span> {log.message}
+                 </div>
+               ))
+             )}
+             <div ref={logsEndRef} />
           </div>
         </div>
       </div>

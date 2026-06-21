@@ -69,3 +69,14 @@ class EducationProgram(Base):
     applied_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+class SystemLog(Base):
+    __tablename__ = "system_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    log_level = Column(String, default="INFO") # e.g., SYS, SCOUT, MATCH, EXEC
+    message = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")

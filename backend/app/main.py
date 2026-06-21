@@ -160,7 +160,7 @@ def recommend_jobs(req: SkillsRequest, db: Session = Depends(get_db)):
     if applied_job_ids:
         query = query.filter(~JobTarget.id.in_(applied_job_ids))
         
-    jobs_from_db = query.order_by(JobTarget.tier1_score.desc()).offset(req.skip).limit(req.limit).all()
+    jobs_from_db = query.order_by(JobTarget.created_at.desc(), JobTarget.tier1_score.desc()).offset(req.skip).limit(req.limit).all()
     
     if not jobs_from_db:
         return {"jobs": []}
