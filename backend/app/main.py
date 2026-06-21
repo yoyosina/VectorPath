@@ -16,8 +16,22 @@ from fastapi.responses import JSONResponse
 import traceback
 
 schema.Base.metadata.create_all(bind=engine)
+import threading
+import sys
+import os
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="VectorPath API", version="0.1.0")
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from daemon_scout import run_scout
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Starting Web Scout background thread...")
+    thread = threading.Thread(target=run_scout, daemon=True)
+    thread.start()
+    yield
+
+app = FastAPI(title="VectorPath API", version="0.1.0", lifespan=lifespan)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
