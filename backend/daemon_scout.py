@@ -67,9 +67,17 @@ def run_scout():
             db.commit()
                 
             # 3. Formulate query based on user's top skills
-            high_conf = [s['name'] for s in user.skill_map if s.get('confidence') in ['High', 'Medium']]
-            top_skills = " ".join(high_conf[:3]) if high_conf else "Software"
-            query = f"{top_skills} job posting remote"
+            import random
+            all_skills = [s['name'] for s in user.skill_map] if user.skill_map else []
+            if len(all_skills) >= 2:
+                selected_skills = random.sample(all_skills, 2)
+            elif all_skills:
+                selected_skills = all_skills
+            else:
+                selected_skills = ["Software"]
+                
+            job_keywords = ["remote job", "hiring", "careers", "job posting", "vacancy"]
+            query = f"{' '.join(selected_skills)} {random.choice(job_keywords)}"
             
             print(f"Scouting for: {query}")
             
