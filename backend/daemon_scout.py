@@ -206,8 +206,8 @@ def run_scout():
                             print(f"Scoring error in background daemon: {score_err}")
                             match_score = 0
                         
-                        # Sleep briefly between scoring individual jobs to respect rate limits
-                        time.sleep(2)
+                        # Sleep 5 seconds between scoring individual jobs to respect Gemini 15 RPM rate limits
+                        time.sleep(5)
                                 
                         new_target = JobTarget(
                             user_id=user.id,
@@ -225,10 +225,13 @@ def run_scout():
                         added_count += 1
                     db.commit()
                     log_msg(db, user.id, "EXEC", f"Successfully evaluated {len(batch)} jobs and saved {added_count} relevant targets with background scoring.")
+                    # Sleep 10 seconds between batches to let the API window reset
+                    time.sleep(10)
                 except Exception as e:
                     print(f"LLM Batch Error: {e}")
                     log_msg(db, user.id, "ERROR", f"LLM Batch Error: {str(e)[:50]}")
-                    # Skip batch on error to keep moving
+                    # Sleep 10 seconds between batches to let API rate limit window cool down
+                    time.sleep(10)
                     continue
                     
             # 6. Finalize page
