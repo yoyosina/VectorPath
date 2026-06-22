@@ -212,6 +212,28 @@ def get_dashboard_metrics(user_id: int, db: Session = Depends(get_db)):
         "education": education_count
     }
 
+@app.get("/api/telemetry/stats")
+def get_telemetry_stats(user_id: int, db: Session = Depends(get_db)):
+    total_jobs = db.query(JobTarget).filter_by(user_id=user_id).count()
+    high_match = db.query(JobTarget).filter_by(user_id=user_id).filter(JobTarget.match_score >= 80).count()
+    medium_match = db.query(JobTarget).filter_by(user_id=user_id).filter(JobTarget.match_score >= 50, JobTarget.match_score < 80).count()
+    low_match = db.query(JobTarget).filter_by(user_id=user_id).filter(JobTarget.match_score < 50, JobTarget.match_score >= 0).count()
+    unscored = db.query(JobTarget).filter_by(user_id=user_id).filter(JobTarget.match_score.is_(None)).count()
+    
+    daemon = db.query(DaemonStatus).filter_by(user_id=user_id).first()
+    daemon_running = daemon.is_running if daemon else False
+    last_scraped = daemon.last_updated if daemon else None
+    
+    return {
+        "total_jobs": total_jobs,
+        "high_match": high_match,
+        "medium_match": medium_match,
+        "low_match": low_match,
+        "unscored": unscored,
+        "daemon_running": daemon_running,
+        "last_scraped": last_scraped
+    }
+
 @app.get("/api/logs/latest")
 def get_latest_logs(user_id: int, db: Session = Depends(get_db)):
     from app.models.schema import SystemLog
