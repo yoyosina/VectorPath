@@ -127,10 +127,22 @@ def run_scout():
                     desc = strip_html(bj.get('description', ''))[:1000] # Use first 1000 chars for speed
                     prompt_text += f"ID: {idx}\nTitle: {bj.get('title')}\nTags: {bj.get('tags')}\nDesc: {desc}\n\n---\n\n"
                     
+                # Retry wrapper for LLM skill map extraction to handle 429 errors
+                extracted = None
+                for attempt in range(3):
+                    try:
+                        log_msg(db, user.id, "MATCH", f"Extracting skill maps for batch {int(i/10)+1} / {int(len(new_jobs)/10)+1} (attempt {attempt+1})...")
+                        extracted = llm.invoke(prompt_text)
+                        break
+                    except Exception as e:
+                        if ("429" in str(e) or "rate_limit" in str(e).lower()) and attempt < 2:
+                            wait_time = (attempt + 1) * 10
+                            print(f"Rate limit hit during batch parse. Sleeping for {wait_time}s...")
+                            time.sleep(wait_time)
+                        else:
+                            raise e
+
                 try:
-                    log_msg(db, user.id, "MATCH", f"Extracting skill maps for batch {int(i/10)+1} / {int(len(new_jobs)/10)+1}...")
-                    extracted = llm.invoke(prompt_text)
-                    
                     # Map extracted skills back to batch
                     added_count = 0
                     for parsed in extracted.jobs:
@@ -152,7 +164,7 @@ def run_scout():
                             else:
                                 continue
                         
-                        # Run the heavy AI Ensemble scoring in background
+                        # Run the heavy AI Ensemble scoring in background with retries & rate-limit safety
                         job_desc = strip_html(job.get('description', ''))[:2000]
                         state = GraphState(
                             target_job_description=job_desc,
@@ -160,13 +172,38 @@ def run_scout():
                         )
                         match_score = 0
                         try:
-                            state.update(score_with_gemini(state))
-                            state.update(score_with_groq(state))
+                            # Gemini call (with 429 retry)
+                            for g_attempt in range(3):
+                                try:
+                                    state.update(score_with_gemini(state))
+                                    break
+                                except Exception as ge:
+                                    if ("429" in str(ge) or "rate" in str(ge).lower()) and g_attempt < 2:
+                                        time.sleep(5)
+                                    else:
+                                        raise ge
+                                        
+                            time.sleep(2) # rate limit buffer
+                            
+                            # Groq call (with 429 retry)
+                            for q_attempt in range(3):
+                                try:
+                                    state.update(score_with_groq(state))
+                                    break
+                                except Exception as qe:
+                                    if ("429" in str(qe) or "rate" in str(qe).lower()) and q_attempt < 2:
+                                        time.sleep(10)
+                                    else:
+                                        raise qe
+                                        
                             state.update(ensemble_scores(state))
                             match_score = round(state.get("final_match_score", 0))
                         except Exception as score_err:
                             print(f"Scoring error in background daemon: {score_err}")
                             match_score = 0
+                        
+                        # Sleep briefly between scoring individual jobs to respect rate limits
+                        time.sleep(2)
                                 
                         new_target = JobTarget(
                             user_id=user.id,
