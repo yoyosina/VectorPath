@@ -138,6 +138,7 @@ def run_scout():
                     except Exception as e:
                         if ("429" in str(e) or "rate_limit" in str(e).lower()) and attempt < 2:
                             wait_time = (attempt + 1) * 10
+                            log_msg(db, user.id, "WARN", f"Rate limit hit during batch parse. Sleeping for {wait_time}s...")
                             print(f"Rate limit hit during batch parse. Sleeping for {wait_time}s...")
                             time.sleep(wait_time)
                         else:
@@ -180,6 +181,7 @@ def run_scout():
                                     break
                                 except Exception as ge:
                                     if ("429" in str(ge) or "rate" in str(ge).lower()) and g_attempt < 2:
+                                        log_msg(db, user.id, "WARN", f"Gemini Rate Limit hit during scoring. Retrying in 5s...")
                                         time.sleep(5)
                                     else:
                                         raise ge
@@ -193,6 +195,7 @@ def run_scout():
                                     break
                                 except Exception as qe:
                                     if ("429" in str(qe) or "rate" in str(qe).lower()) and q_attempt < 2:
+                                        log_msg(db, user.id, "WARN", f"Groq Rate Limit hit during scoring. Retrying in 10s...")
                                         time.sleep(10)
                                     else:
                                         raise qe

@@ -189,6 +189,7 @@ export default function AgentClusterOversight() {
                 logs.map((log, idx) => (
                   <div key={idx} className={
                     log.level === 'ERROR' ? 'text-red-400' :
+                    log.level === 'WARN' ? 'text-yellow-400 font-semibold' :
                     log.level === 'SCOUT' ? 'text-cyan-300' :
                     log.level === 'MATCH' ? 'text-green-400' :
                     log.level === 'EXEC' ? 'text-purple-400' :
