@@ -6,6 +6,7 @@ import requests
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
@@ -116,7 +117,7 @@ def run_scout():
             log_msg(db, user.id, "SCOUT", f"Found {len(new_jobs)} new jobs. Processing through AI Ensemble...")
             
             # 5. Process new jobs via LLM in batches
-            llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1).with_structured_output(BatchParsedJobs)
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1).with_structured_output(BatchParsedJobs)
             user_skills = [Skill(**s) for s in user.skill_map]
             
             for i in range(0, len(new_jobs), 10): # Batch 10 at a time
