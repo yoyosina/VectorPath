@@ -10,9 +10,26 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from app.core.database import SessionLocal
-from app.models.schema import User, JobTarget, DaemonStatus
+from app.models.schema import User, JobTarget, DaemonStatus, SystemLog
+from app.services.state import Skill, GraphState
+from app.services.matchmaker_agent import score_with_gemini, score_with_groq, ensemble_scores
 
 load_dotenv()
+
+def log_msg(db, user_id, level, message):
+    try:
+        new_log = SystemLog(user_id=user_id, log_level=level, message=message)
+        db.add(new_log)
+        # Keep only last 50 logs to prevent bloat
+        count = db.query(SystemLog).filter_by(user_id=user_id).count()
+        if count > 50:
+            oldest = db.query(SystemLog).filter_by(user_id=user_id).order_by(SystemLog.created_at.asc()).first()
+            if oldest:
+                db.delete(oldest)
+        db.commit()
+    except Exception as e:
+        print("Log error:", e)
+        db.rollback()
 
 class ParsedJob(BaseModel):
     id: str = Field(description="The numeric ID of the job from the batch")
@@ -64,6 +81,7 @@ def run_scout():
             
             # 3. Fetch from Arbeitnow
             print(f"Fetching Arbeitnow Page {page_tracker}...")
+            log_msg(db, user.id, "SCOUT", f"Fetching Arbeitnow Job Board (Page {page_tracker})...")
             api_url = f"https://www.arbeitnow.com/api/job-board-api?page={page_tracker}"
             try:
                 res = requests.get(api_url, timeout=15)
@@ -74,28 +92,32 @@ def run_scout():
             except Exception as e:
                 daemon.last_error = f"API Fetch Error: {e}"
                 db.commit()
+                log_msg(db, user.id, "ERROR", f"Failed to fetch jobs: {str(e)[:50]}")
                 time.sleep(30)
                 continue
                 
             if not jobs_data:
                 print("Reached end of API. Resetting to page 1.")
+                log_msg(db, user.id, "SYS", "Reached end of job database. Resetting to Page 1.")
                 page_tracker = 1
                 time.sleep(60)
                 continue
                 
-            # 4. Filter duplicates locally
+            # 4. Filter duplicates locally (optimized batch query)
+            existing_jobs = set(db.query(JobTarget.title, JobTarget.company).filter_by(user_id=user.id).all())
             new_jobs = []
             for j in jobs_data:
                 title = j.get('title', '')
                 company = j.get('company_name', '')
-                existing = db.query(JobTarget).filter_by(user_id=user.id, title=title, company=company).first()
-                if not existing:
+                if (title, company) not in existing_jobs:
                     new_jobs.append(j)
                     
             print(f"Found {len(new_jobs)} new jobs on page {page_tracker}. Processing in batches...")
+            log_msg(db, user.id, "SCOUT", f"Found {len(new_jobs)} new jobs. Processing through AI Ensemble...")
             
             # 5. Process new jobs via LLM in batches
             llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1).with_structured_output(BatchParsedJobs)
+            user_skills = [Skill(**s) for s in user.skill_map]
             
             for i in range(0, len(new_jobs), 10): # Batch 10 at a time
                 batch = new_jobs[i:i+10]
@@ -106,9 +128,11 @@ def run_scout():
                     prompt_text += f"ID: {idx}\nTitle: {bj.get('title')}\nTags: {bj.get('tags')}\nDesc: {desc}\n\n---\n\n"
                     
                 try:
+                    log_msg(db, user.id, "MATCH", f"Extracting skill maps for batch {int(i/10)+1} / {int(len(new_jobs)/10)+1}...")
                     extracted = llm.invoke(prompt_text)
                     
                     # Map extracted skills back to batch
+                    added_count = 0
                     for parsed in extracted.jobs:
                         try:
                             idx = int(parsed.id)
@@ -127,22 +151,42 @@ def run_scout():
                                 db.commit()
                             else:
                                 continue
+                        
+                        # Run the heavy AI Ensemble scoring in background
+                        job_desc = strip_html(job.get('description', ''))[:2000]
+                        state = GraphState(
+                            target_job_description=job_desc,
+                            final_skills=user_skills
+                        )
+                        match_score = 0
+                        try:
+                            state.update(score_with_gemini(state))
+                            state.update(score_with_groq(state))
+                            state.update(ensemble_scores(state))
+                            match_score = round(state.get("final_match_score", 0))
+                        except Exception as score_err:
+                            print(f"Scoring error in background daemon: {score_err}")
+                            match_score = 0
                                 
                         new_target = JobTarget(
                             user_id=user.id,
                             title=job.get('title', ''),
                             company=job.get('company_name', ''),
                             location=job.get('location', 'Remote'),
-                            description=strip_html(job.get('description', ''))[:2000],
+                            description=job_desc,
                             salary="Competitive", # Arbeitnow rarely has salary
                             tags=job.get('tags', []),
                             job_skill_map=parsed.skill_map,
-                            tier1_score=t1_score
+                            tier1_score=t1_score,
+                            match_score=match_score
                         )
                         db.add(new_target)
+                        added_count += 1
                     db.commit()
+                    log_msg(db, user.id, "EXEC", f"Successfully evaluated {len(batch)} jobs and saved {added_count} relevant targets with background scoring.")
                 except Exception as e:
                     print(f"LLM Batch Error: {e}")
+                    log_msg(db, user.id, "ERROR", f"LLM Batch Error: {str(e)[:50]}")
                     # Skip batch on error to keep moving
                     continue
                     
@@ -153,6 +197,7 @@ def run_scout():
             db.commit()
             
             print(f"Page processed. Total db jobs: {daemon.total_jobs_scraped}")
+            log_msg(db, user.id, "SYS", f"Page {page_tracker-1} complete. Database holding {daemon.total_jobs_scraped} jobs. Resting...")
             time.sleep(5) # brief pause between pages
             
         except Exception as e:

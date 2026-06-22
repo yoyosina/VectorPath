@@ -160,16 +160,24 @@ def recommend_jobs(req: SkillsRequest, db: Session = Depends(get_db)):
     if applied_job_ids:
         query = query.filter(~JobTarget.id.in_(applied_job_ids))
         
-    jobs_from_db = query.order_by(JobTarget.created_at.desc(), JobTarget.tier1_score.desc()).offset(req.skip).limit(req.limit).all()
+    # Fetch pre-scored jobs sorted by match_score descending
+    jobs_from_db = query.order_by(
+        JobTarget.match_score.desc().nullslast(),
+        JobTarget.tier1_score.desc(),
+        JobTarget.created_at.desc()
+    ).offset(req.skip).limit(req.limit).all()
     
     if not jobs_from_db:
         return {"jobs": []}
         
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(score_job, job, skills) for job in jobs_from_db]
-        scored_jobs = [f.result() for f in futures]
-        
-    db.commit()
+    # Failsafe: only score jobs in real-time if they are missing a match_score
+    unscored_jobs = [job for job in jobs_from_db if job.match_score is None]
+    if unscored_jobs:
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(score_job, job, skills) for job in unscored_jobs]
+            for f in futures:
+                f.result()
+        db.commit()
     
     results = [{
         "id": job.id,
@@ -178,8 +186,8 @@ def recommend_jobs(req: SkillsRequest, db: Session = Depends(get_db)):
         "location": job.location,
         "tags": job.tags,
         "salary": job.salary,
-        "match_score": job.match_score
-    } for job in scored_jobs]
+        "match_score": job.match_score if job.match_score is not None else 0
+    } for job in jobs_from_db]
     
     results.sort(key=lambda x: x["match_score"], reverse=True)
     return {"jobs": results}
@@ -203,6 +211,13 @@ def get_dashboard_metrics(user_id: int, db: Session = Depends(get_db)):
         "selected": selected_count,
         "education": education_count
     }
+
+@app.get("/api/logs/latest")
+def get_latest_logs(user_id: int, db: Session = Depends(get_db)):
+    from app.models.schema import SystemLog
+    logs = db.query(SystemLog).filter_by(user_id=user_id).order_by(SystemLog.created_at.desc()).limit(20).all()
+    logs.reverse()
+    return {"logs": [{"level": l.log_level, "message": l.message, "timestamp": l.created_at} for l in logs]}
 
 @app.post("/api/jobs/apply")
 def apply_to_job(req: ApplyRequest, db: Session = Depends(get_db)):
