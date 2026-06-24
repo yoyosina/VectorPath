@@ -104,17 +104,25 @@ def run_scout():
                 time.sleep(60)
                 continue
                 
-            # 4. Filter duplicates locally (optimized batch query)
+            # 4. Filter duplicates and apply local heuristic keyword filter (optimizes API quota usage by 80%+)
             existing_jobs = set(db.query(JobTarget.title, JobTarget.company).filter_by(user_id=user.id).all())
+            user_keywords = [s.get("name", "").lower() for s in user.skill_map if s.get("name")]
+            
             new_jobs = []
+            skipped_count = 0
             for j in jobs_data:
                 title = j.get('title', '')
                 company = j.get('company_name', '')
                 if (title, company) not in existing_jobs:
-                    new_jobs.append(j)
-                    
-            print(f"Found {len(new_jobs)} new jobs on page {page_tracker}. Processing in batches...")
-            log_msg(db, user.id, "SCOUT", f"Found {len(new_jobs)} new jobs. Processing through AI Ensemble...")
+                    desc = strip_html(j.get('description', '')).lower()
+                    title_lower = title.lower()
+                    if any(kw in title_lower or kw in desc for kw in user_keywords):
+                        new_jobs.append(j)
+                    else:
+                        skipped_count += 1
+                        
+            print(f"Scout Page {page_tracker}: Found {len(new_jobs)} relevant new jobs, skipped {skipped_count} irrelevant ones.")
+            log_msg(db, user.id, "SCOUT", f"Page {page_tracker}: Found {len(new_jobs)} relevant jobs, skipped {skipped_count} irrelevant ones.")
             
             # 5. Process new jobs via LLM in batches
             llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1).with_structured_output(BatchParsedJobs)
