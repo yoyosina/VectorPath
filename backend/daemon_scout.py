@@ -229,9 +229,9 @@ def run_scout():
                     time.sleep(10)
                 except Exception as e:
                     print(f"LLM Batch Error: {e}")
-                    log_msg(db, user.id, "ERROR", f"LLM Batch Error: {str(e)[:50]}")
-                    # Sleep 10 seconds between batches to let API rate limit window cool down
-                    time.sleep(10)
+                    log_msg(db, user.id, "ERROR", f"LLM Batch Error: {str(e)[:40]}. Cooling down for 30 mins...")
+                    # Cool down for 30 minutes to let daily quotas reset and prevent self-inflicted API exhaustion
+                    time.sleep(1800)
                     continue
                     
             # 6. Finalize page
