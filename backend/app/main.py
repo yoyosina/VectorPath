@@ -136,7 +136,8 @@ def score_job(job, skills):
 
     state = GraphState(
         target_job_description=job.description,
-        final_skills=skills
+        final_skills=skills,
+        user_id=job.user_id
     )
     state.update(score_with_gemini(state))
     state.update(score_with_groq(state))
@@ -145,6 +146,7 @@ def score_job(job, skills):
     match_score = round(state.get("final_match_score", 0))
     job.match_score = match_score
     return job
+
 
 @app.post("/api/jobs/recommend")
 def recommend_jobs(req: SkillsRequest, db: Session = Depends(get_db)):
@@ -243,6 +245,9 @@ def get_latest_logs(user_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/jobs/apply")
 def apply_to_job(req: ApplyRequest, db: Session = Depends(get_db)):
+    import re
+    from sqlalchemy.orm.attributes import flag_modified
+    
     job = db.query(JobTarget).filter_by(id=req.job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -259,5 +264,53 @@ def apply_to_job(req: ApplyRequest, db: Session = Depends(get_db)):
         status="Applied"
     )
     db.add(new_app)
+    
+    # Self-learning feedback loop: adjust weights or append new skills
+    user = db.query(User).filter_by(id=req.user_id).first()
+    if user:
+        skill_map = user.skill_map or []
+        existing_skills = {s.get("name", "").lower(): s for s in skill_map if s.get("name")}
+        
+        matched_job_skills = [s.lower() for s in (job.job_skill_map or [])]
+        title_words = [w.lower() for w in re.split(r'\W+', job.title) if len(w) > 2]
+        
+        # Boost existing matched skills
+        for s_name, s_info in existing_skills.items():
+            if s_name in matched_job_skills or any(w in s_name or s_name in w for w in title_words):
+                current_weight = s_info.get("weight", 1.0)
+                s_info["weight"] = min(5.0, current_weight + 0.5)
+                s_info["confidence"] = "High"
+                
+        # Extract and insert new technical skills
+        for j_skill in (job.job_skill_map or []):
+            j_skill_lower = j_skill.lower()
+            if j_skill_lower not in existing_skills:
+                new_skill_entry = {
+                    "name": j_skill,
+                    "confidence": "High",
+                    "weight": 2.0
+                }
+                skill_map.append(new_skill_entry)
+                existing_skills[j_skill_lower] = new_skill_entry
+                
+        # Extract and insert clean job title roles
+        for role in ["architect", "manager", "developer", "engineer", "designer", "scientist"]:
+            if role in title_words:
+                cleaned_title = job.title
+                for word in ["senior", "junior", "lead", "staff", "principal", "associate"]:
+                    cleaned_title = re.sub(r'(?i)\b' + word + r'\b', '', cleaned_title)
+                cleaned_title = " ".join(cleaned_title.split())
+                if len(cleaned_title) < 40 and cleaned_title.lower() not in existing_skills:
+                    skill_map.append({
+                        "name": cleaned_title,
+                        "confidence": "High",
+                        "weight": 2.5
+                    })
+                    existing_skills[cleaned_title.lower()] = {"name": cleaned_title}
+                    
+        user.skill_map = skill_map
+        flag_modified(user, "skill_map")
+        
     db.commit()
     return {"status": "Applied"}
+

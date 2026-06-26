@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class Skill(BaseModel):
     name: str
     confidence: str # "High" for overlap, "Low" for non-overlap
+    weight: float = 1.0
 
 class GraphState(TypedDict, total=False):
     # Inputs

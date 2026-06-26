@@ -104,9 +104,9 @@ def run_scout():
                 time.sleep(60)
                 continue
                 
-            # 4. Filter duplicates and apply local heuristic keyword filter (optimizes API quota usage by 80%+)
+            # 4. Filter duplicates and apply local heuristic keyword weight filter
             existing_jobs = set(db.query(JobTarget.title, JobTarget.company).filter_by(user_id=user.id).all())
-            user_keywords = [s.get("name", "").lower() for s in user.skill_map if s.get("name")]
+            user_skills_list = user.skill_map or []
             
             new_jobs = []
             skipped_count = 0
@@ -116,13 +116,24 @@ def run_scout():
                 if (title, company) not in existing_jobs:
                     desc = strip_html(j.get('description', '')).lower()
                     title_lower = title.lower()
-                    if any(kw in title_lower or kw in desc for kw in user_keywords):
+                    
+                    # Compute dynamic heuristic score based on skill weights
+                    relevance_score = 0.0
+                    for skill in user_skills_list:
+                        s_name = skill.get("name", "").lower()
+                        s_weight = skill.get("weight", 1.0)
+                        if s_name and (s_name in title_lower or s_name in desc):
+                            relevance_score += s_weight
+                            
+                    # Threshold check: requires a minimum cumulative weight of 1.5 to proceed to LLM parsing
+                    if relevance_score >= 1.5:
                         new_jobs.append(j)
                     else:
                         skipped_count += 1
                         
-            print(f"Scout Page {page_tracker}: Found {len(new_jobs)} relevant new jobs, skipped {skipped_count} irrelevant ones.")
+            print(f"Scout Page {page_tracker}: Found {len(new_jobs)} relevant new jobs (relevance >= 1.5), skipped {skipped_count} irrelevant ones.")
             log_msg(db, user.id, "SCOUT", f"Page {page_tracker}: Found {len(new_jobs)} relevant jobs, skipped {skipped_count} irrelevant ones.")
+
             
             # 5. Process new jobs via LLM in batches
             llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1).with_structured_output(BatchParsedJobs)
@@ -178,7 +189,8 @@ def run_scout():
                         job_desc = strip_html(job.get('description', ''))[:2000]
                         state = GraphState(
                             target_job_description=job_desc,
-                            final_skills=user_skills
+                            final_skills=user_skills,
+                            user_id=user.id
                         )
                         match_score = 0
                         try:
@@ -217,20 +229,25 @@ def run_scout():
                         # Sleep 5 seconds between scoring individual jobs to respect Gemini 15 RPM rate limits
                         time.sleep(5)
                                 
-                        new_target = JobTarget(
-                            user_id=user.id,
-                            title=job.get('title', ''),
-                            company=job.get('company_name', ''),
-                            location=job.get('location', 'Remote'),
-                            description=job_desc,
-                            salary="Competitive", # Arbeitnow rarely has salary
-                            tags=job.get('tags', []),
-                            job_skill_map=parsed.skill_map,
-                            tier1_score=t1_score,
-                            match_score=match_score
-                        )
-                        db.add(new_target)
-                        added_count += 1
+                        # DB Quality Gate: Only save jobs that have a match score of 50 or above (Instant High/Medium Match profile)
+                        if match_score >= 50:
+                            new_target = JobTarget(
+                                user_id=user.id,
+                                title=job.get('title', ''),
+                                company=job.get('company_name', ''),
+                                location=job.get('location', 'Remote'),
+                                description=job_desc,
+                                salary="Competitive", # Arbeitnow rarely has salary
+                                tags=job.get('tags', []),
+                                job_skill_map=parsed.skill_map,
+                                tier1_score=t1_score,
+                                match_score=match_score
+                            )
+                            db.add(new_target)
+                            added_count += 1
+                        else:
+                            print(f"Quality Gate: Skipped job '{job.get('title')}' at '{job.get('company_name')}' with low score: {match_score}")
+
                     db.commit()
                     log_msg(db, user.id, "EXEC", f"Successfully evaluated {len(batch)} jobs and saved {added_count} relevant targets with background scoring.")
                     # Sleep 10 seconds between batches to let the API window reset
