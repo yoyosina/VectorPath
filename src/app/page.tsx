@@ -15,8 +15,32 @@ export default function JobEcosystem() {
   const [metrics, setMetrics] = useState({ applied: 0, interviews: 0, selected: 0, education: 0 });
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [activeModalJob, setActiveModalJob] = useState<any | null>(null);
+  const [summaryModalJob, setSummaryModalJob] = useState<any | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [agentLogs, setAgentLogs] = useState<any[]>([]);
   const [isCopied, setIsCopied] = useState(false);
+
+  const openSummaryModal = async (job: any) => {
+    setSummaryModalJob({
+      ...job,
+      summary: job.description ? (job.description.slice(0, 250) + "...") : "Analyzing posting details...",
+      responsibilities: ["Synthesizing daily expectations..."],
+      recruiter_expectations: job.job_skill_map || ["Analyzing required qualifications..."]
+    });
+    setIsSummaryLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/jobs/${job.id}/summary`);
+      if (res.ok) {
+        const data = await res.json();
+        setSummaryModalJob(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch job summary:", err);
+    } finally {
+      setIsSummaryLoading(false);
+    }
+  };
+
 
   // Poll live telemetry logs when modal is active
   useEffect(() => {
@@ -280,10 +304,17 @@ export default function JobEcosystem() {
       {skills.length > 0 && jobs.length > 0 && (
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {jobs.map((job, idx) => (
-            <article key={idx} className="glass-panel rounded-xl p-6 border-cyan-top flex flex-col gap-4 hover:shadow-[0_0_30px_rgba(0,219,233,0.1)] transition-shadow">
+            <article 
+              key={idx} 
+              onClick={() => openSummaryModal(job)}
+              className="glass-panel rounded-xl p-6 border-cyan-top flex flex-col gap-4 hover:shadow-[0_0_30px_rgba(0,219,233,0.2)] transition-all cursor-pointer group"
+            >
               <div className="flex justify-between items-start">
                 <div>
-                  <h4 className="font-headline-md text-headline-md text-on-surface mb-1">{job.title}</h4>
+                  <h4 className="font-headline-md text-headline-md text-on-surface mb-1 group-hover:text-primary transition-colors flex items-center gap-2">
+                    {job.title}
+                    <span className="material-symbols-outlined text-sm opacity-0 group-hover:opacity-100 transition-opacity text-primary">info</span>
+                  </h4>
                   <p className="font-label-md text-label-md text-on-surface-variant flex items-center gap-1">
                     <span className="material-symbols-outlined text-sm">apartment</span>
                     {job.company} • {job.location}
@@ -315,7 +346,10 @@ export default function JobEcosystem() {
                   Ready to Autopilot
                 </div>
                 <button 
-                  onClick={() => !job.applied && handleApply(job.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!job.applied) handleApply(job.id);
+                  }}
                   disabled={job.applied}
                   className={`px-4 py-2 bg-transparent border border-primary-fixed-dim text-primary-fixed-dim rounded font-label-md text-label-md ${job.applied ? 'opacity-50 cursor-not-allowed bg-primary-fixed-dim/20' : 'hover:bg-primary-fixed-dim hover:text-black transition-colors'}`}
                 >
@@ -324,6 +358,7 @@ export default function JobEcosystem() {
               </div>
             </article>
           ))}
+
         </section>
       )}
 
@@ -437,7 +472,157 @@ export default function JobEcosystem() {
           </div>
         </div>
       )}
+
+      {summaryModalJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="glass-panel w-full max-w-3xl rounded-2xl p-6 border-cyan-top flex flex-col max-h-[90vh] overflow-hidden shadow-2xl">
+            <div className="flex justify-between items-start pb-4 border-b border-outline-variant/30">
+              <div>
+                <div className="flex items-center gap-2 text-primary text-xs font-semibold uppercase tracking-wider mb-1">
+                  <span className="material-symbols-outlined text-sm">analytics</span>
+                  AI Job Intelligence Briefing
+                </div>
+                <h3 className="text-xl font-bold text-on-surface">{summaryModalJob.title}</h3>
+                <p className="text-sm text-on-surface-variant flex items-center gap-2 mt-1">
+                  <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">apartment</span>{summaryModalJob.company}</span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">location_on</span>{summaryModalJob.location}</span>
+                </p>
+              </div>
+              <button 
+                onClick={() => setSummaryModalJob(null)}
+                className="p-1 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-variant"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-6">
+              {/* Key Metadata Badges */}
+              <div className="flex flex-wrap gap-3">
+                <div className="bg-surface-container-low px-4 py-2 rounded-xl border border-outline-variant/30 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-sm">payments</span>
+                  <div>
+                    <div className="text-[10px] text-on-surface-variant uppercase tracking-wider">Compensation</div>
+                    <div className="text-xs font-bold text-on-surface">{summaryModalJob.salary || "Competitive"}</div>
+                  </div>
+                </div>
+                <div className="bg-surface-container-low px-4 py-2 rounded-xl border border-outline-variant/30 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-sm">distance</span>
+                  <div>
+                    <div className="text-[10px] text-on-surface-variant uppercase tracking-wider">Location / Workplace</div>
+                    <div className="text-xs font-bold text-on-surface">{summaryModalJob.location || "Remote / Onsite"}</div>
+                  </div>
+                </div>
+                {summaryModalJob.match_score !== undefined && (
+                  <div className="bg-primary/10 px-4 py-2 rounded-xl border border-primary/30 flex items-center gap-2 ml-auto">
+                    <span className="material-symbols-outlined text-primary text-sm">auto_awesome</span>
+                    <div>
+                      <div className="text-[10px] text-primary-fixed-dim uppercase tracking-wider">AI Ensemble Match</div>
+                      <div className="text-xs font-black text-primary">{summaryModalJob.match_score}%</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Loader or AI Summary */}
+              {isSummaryLoading && (
+                <div className="flex items-center justify-center py-6 text-primary animate-pulse bg-black/30 rounded-xl border border-outline-variant/20">
+                  <span className="material-symbols-outlined animate-spin mr-2">sync</span>
+                  <span className="text-xs font-medium">Gemini 2.5 Flash synthesizing executive job summary...</span>
+                </div>
+              )}
+
+              {/* 1. Executive Summary */}
+              <div className="bg-surface-container-low rounded-xl p-4 border border-outline-variant/30">
+                <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-base">summarize</span>
+                  Executive Role Overview
+                </h4>
+                <p className="text-xs text-on-surface leading-relaxed">{summaryModalJob.summary}</p>
+              </div>
+
+              {/* 2. Responsibilities */}
+              <div className="bg-surface-container-low rounded-xl p-4 border border-outline-variant/30">
+                <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-base">task_alt</span>
+                  What You Are Expected To Do
+                </h4>
+                <ul className="space-y-2 text-xs text-on-surface">
+                  {Array.isArray(summaryModalJob.responsibilities) ? (
+                    summaryModalJob.responsibilities.map((item: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-primary text-sm shrink-0 mt-0.5">check_circle</span>
+                        <span>{item}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="flex items-start gap-2">
+                      <span className="material-symbols-outlined text-primary text-sm shrink-0 mt-0.5">check_circle</span>
+                      <span>{summaryModalJob.responsibilities}</span>
+                    </li>
+                  )}
+                </ul>
+              </div>
+
+              {/* 3. What Recruiter is Looking For */}
+              <div className="bg-surface-container-low rounded-xl p-4 border border-outline-variant/30">
+                <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-base">person_search</span>
+                  What The Recruiter Is Looking For
+                </h4>
+                <ul className="space-y-2 text-xs text-on-surface mb-3">
+                  {Array.isArray(summaryModalJob.recruiter_expectations) ? (
+                    summaryModalJob.recruiter_expectations.map((item: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-primary-fixed-dim text-sm shrink-0 mt-0.5">star</span>
+                        <span>{item}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="flex items-start gap-2">
+                      <span className="material-symbols-outlined text-primary-fixed-dim text-sm shrink-0 mt-0.5">star</span>
+                      <span>{summaryModalJob.recruiter_expectations}</span>
+                    </li>
+                  )}
+                </ul>
+
+                {summaryModalJob.job_skill_map && summaryModalJob.job_skill_map.length > 0 && (
+                  <div className="pt-2 border-t border-outline-variant/20 flex flex-wrap gap-1.5">
+                    {summaryModalJob.job_skill_map.map((s: string, idx: number) => (
+                      <span key={idx} className="px-2.5 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full text-[11px] font-medium">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-outline-variant/30 flex justify-between items-center">
+              <button
+                onClick={() => setSummaryModalJob(null)}
+                className="px-4 py-2 bg-surface-variant text-on-surface rounded-lg font-bold text-xs hover:bg-outline-variant transition-colors"
+              >
+                Close Briefing
+              </button>
+              <button
+                onClick={() => {
+                  const jId = summaryModalJob.id;
+                  setSummaryModalJob(null);
+                  handleApply(jId);
+                }}
+                className="px-5 py-2.5 bg-primary text-black rounded-lg font-bold text-xs hover:bg-primary-fixed-dim transition-colors flex items-center gap-1.5 shadow-lg"
+              >
+                <span className="material-symbols-outlined text-base">rocket_launch</span>
+                Apply Now via Autopilot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
+
 
   );
 }

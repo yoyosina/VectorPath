@@ -188,11 +188,14 @@ def recommend_jobs(req: SkillsRequest, db: Session = Depends(get_db)):
         "location": job.location,
         "tags": job.tags,
         "salary": job.salary,
+        "description": job.description,
+        "job_skill_map": job.job_skill_map,
         "match_score": job.match_score if job.match_score is not None else 0
     } for job in jobs_from_db]
     
     results.sort(key=lambda x: x["match_score"], reverse=True)
     return {"jobs": results}
+
 
 from app.models.schema import JobApplication, EducationProgram
 
@@ -359,5 +362,53 @@ Write a persuasive 3-paragraph cover letter formatted cleanly. Address the hirin
         "cover_letter": cover_letter,
         "autopilot_status": "Agentic AI Triggered"
     }
+
+class JobIntelligenceSummary(BaseModel):
+    summary: str = Field(description="A concise 2-sentence executive summary of what this job is and its main purpose.")
+    responsibilities: List[str] = Field(description="3 to 5 clear bullet points of what the candidate is expected to do in this role.")
+    recruiter_expectations: List[str] = Field(description="3 to 5 clear bullet points of what technical skills and qualifications the recruiter is looking for.")
+
+@app.get("/api/jobs/{job_id}/summary")
+def get_job_summary(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(JobTarget).filter_by(id=job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    try:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1).with_structured_output(JobIntelligenceSummary)
+        prompt = f"""Analyze this job posting and extract an executive summary briefing for candidate review.
+Title: {job.title}
+Company: {job.company}
+Location: {job.location}
+Salary: {job.salary}
+Description: {job.description[:2500]}
+"""
+        res = llm.invoke(prompt)
+        return {
+            "id": job.id,
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "salary": job.salary,
+            "summary": res.summary,
+            "responsibilities": res.responsibilities,
+            "recruiter_expectations": res.recruiter_expectations,
+            "job_skill_map": job.job_skill_map
+        }
+    except Exception as e:
+        print("Summary error:", e)
+        return {
+            "id": job.id,
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "salary": job.salary,
+            "summary": (job.description[:300] if job.description else "No description available") + "...",
+            "responsibilities": ["Refer to primary job posting for daily expectations."],
+            "recruiter_expectations": job.job_skill_map or ["Relevant engineering experience."],
+            "job_skill_map": job.job_skill_map
+        }
+
 
 
