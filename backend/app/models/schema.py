@@ -53,10 +53,13 @@ class JobApplication(Base):
     company = Column(String)
     title = Column(String)
     status = Column(String, default="Applied") # Applied, Interviewing, Selected, Rejected
+    cover_letter = Column(Text, nullable=True)
+    autopilot_status = Column(String, default="Autopilot Completed")
     applied_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
     job = relationship("JobTarget")
+
 
 class EducationProgram(Base):
     __tablename__ = "education_programs"

@@ -246,27 +246,62 @@ def get_latest_logs(user_id: int, db: Session = Depends(get_db)):
 @app.post("/api/jobs/apply")
 def apply_to_job(req: ApplyRequest, db: Session = Depends(get_db)):
     import re
+    import threading
     from sqlalchemy.orm.attributes import flag_modified
+    from app.services.autopilot_agent import execute_autopilot
+    from langchain_google_genai import ChatGoogleGenerativeAI
     
     job = db.query(JobTarget).filter_by(id=req.job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
+    user = db.query(User).filter_by(id=req.user_id).first()
+    
     app_exists = db.query(JobApplication).filter_by(user_id=req.user_id, job_id=req.job_id).first()
     if app_exists:
-        return {"status": "Already applied"}
+        return {
+            "status": "Already applied",
+            "job_title": job.title,
+            "company": job.company,
+            "cover_letter": app_exists.cover_letter or "Tailored Cover Letter already generated.",
+            "autopilot_status": app_exists.autopilot_status or "Completed"
+        }
+
+    # 1. Generate tailored cover letter using Gemini 2.5 Flash
+    resume_text = (user.resume_text if user else "")[:3000]
+    job_desc = (job.description if job else "")[:3000]
+    
+    cover_letter = ""
+    try:
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3)
+        prompt = f"""Write a compelling, professional, and highly tailored cover letter for this job application.
+Candidate Resume Context:
+{resume_text}
+
+Target Job Details:
+Title: {job.title}
+Company: {job.company}
+Description: {job_desc}
+
+Write a persuasive 3-paragraph cover letter formatted cleanly. Address the hiring team at {job.company} directly."""
+        res = llm.invoke(prompt)
+        cover_letter = str(res.content)
+    except Exception as cl_err:
+        print("Cover letter generation error:", cl_err)
+        cover_letter = f"Dear Hiring Manager at {job.company},\n\nI am writing to express my strong interest in the {job.title} position. Based on my technical background and skills, I am confident in my ability to contribute effectively to your team.\n\nSincerely,\nCandidate"
         
     new_app = JobApplication(
         user_id=req.user_id,
         job_id=req.job_id,
         company=job.company,
         title=job.title,
-        status="Applied"
+        status="Applied",
+        cover_letter=cover_letter,
+        autopilot_status="Agentic AI Triggered"
     )
     db.add(new_app)
     
-    # Self-learning feedback loop: adjust weights or append new skills
-    user = db.query(User).filter_by(id=req.user_id).first()
+    # 2. Self-learning feedback loop: adjust weights or append new skills
     if user:
         skill_map = user.skill_map or []
         existing_skills = {s.get("name", "").lower(): s for s in skill_map if s.get("name")}
@@ -312,5 +347,17 @@ def apply_to_job(req: ApplyRequest, db: Session = Depends(get_db)):
         flag_modified(user, "skill_map")
         
     db.commit()
-    return {"status": "Applied"}
+    
+    # 3. Launch autonomous Agentic AI browser task in background
+    thread = threading.Thread(target=execute_autopilot, args=(req.user_id, req.job_id, cover_letter), daemon=True)
+    thread.start()
+    
+    return {
+        "status": "Applied",
+        "job_title": job.title,
+        "company": job.company,
+        "cover_letter": cover_letter,
+        "autopilot_status": "Agentic AI Triggered"
+    }
+
 
