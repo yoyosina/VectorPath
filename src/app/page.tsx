@@ -435,8 +435,9 @@ export default function JobEcosystem() {
                 ) : (
                   <div className="flex flex-col items-center justify-center py-8 text-on-surface-variant">
                     <span className="material-symbols-outlined text-3xl animate-spin text-primary mb-2">sync</span>
-                    <span className="text-xs">Synthesizing personalized cover letter using Gemini 2.5 Flash...</span>
+                    <span className="text-xs">Synthesizing personalized cover letter using Groq (llama-3.3-70b)...</span>
                   </div>
+
                 )}
               </div>
 

@@ -117,7 +117,7 @@ def get_daemon_status(user_id: int, db: Session = Depends(get_db)):
         "last_updated": daemon.last_updated
     }
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from app.services.state import Skill
 from app.services.matchmaker_agent import score_with_gemini, score_with_groq, ensemble_scores
@@ -270,13 +270,14 @@ def apply_to_job(req: ApplyRequest, db: Session = Depends(get_db)):
             "autopilot_status": app_exists.autopilot_status or "Completed"
         }
 
-    # 1. Generate tailored cover letter using Gemini 2.5 Flash
+    # 1. Generate tailored cover letter using Groq (sub-second latency)
     resume_text = (user.resume_text if user else "")[:3000]
     job_desc = (job.description if job else "")[:3000]
     
     cover_letter = ""
     try:
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3)
+        from langchain_groq import ChatGroq
+        llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.3)
         prompt = f"""Write a compelling, professional, and highly tailored cover letter for this job application.
 Candidate Resume Context:
 {resume_text}
@@ -292,6 +293,7 @@ Write a persuasive 3-paragraph cover letter formatted cleanly. Address the hirin
     except Exception as cl_err:
         print("Cover letter generation error:", cl_err)
         cover_letter = f"Dear Hiring Manager at {job.company},\n\nI am writing to express my strong interest in the {job.title} position. Based on my technical background and skills, I am confident in my ability to contribute effectively to your team.\n\nSincerely,\nCandidate"
+
         
     new_app = JobApplication(
         user_id=req.user_id,

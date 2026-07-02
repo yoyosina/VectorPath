@@ -35,12 +35,13 @@ async def run_autonomous_application_async(user_id: int, job_id: int, cover_lett
         
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
+            page = await browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             
             try:
                 emit_agent_log(db, user_id, f"🚀 [AUTOPILOT] Opening {portal_url}...")
-                # Open page with timeout failsafe
-                await page.goto(portal_url, timeout=20000, wait_until="domcontentloaded")
+                # Open page with an optimized 8-second timeout failsafe
+                await page.goto(portal_url, timeout=8000, wait_until="domcontentloaded")
+
                 emit_agent_log(db, user_id, "📄 [AUTOPILOT] Page loaded. Analyzing HTML DOM structure and input selectors...")
                 await asyncio.sleep(2)
                 
