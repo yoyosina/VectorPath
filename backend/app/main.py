@@ -240,11 +240,26 @@ def get_telemetry_stats(user_id: int, db: Session = Depends(get_db)):
     }
 
 @app.get("/api/logs/latest")
-def get_latest_logs(user_id: int, db: Session = Depends(get_db)):
+def get_latest_logs(user_id: int, level: Optional[str] = None, db: Session = Depends(get_db)):
     from app.models.schema import SystemLog
-    logs = db.query(SystemLog).filter_by(user_id=user_id).order_by(SystemLog.created_at.desc()).limit(20).all()
+    query = db.query(SystemLog).filter_by(user_id=user_id)
+    if level:
+        query = query.filter_by(log_level=level)
+    logs = query.order_by(SystemLog.created_at.desc()).limit(30).all()
     logs.reverse()
     return {"logs": [{"level": l.log_level, "message": l.message, "timestamp": l.created_at} for l in logs]}
+
+@app.get("/api/jobs/application/status")
+def get_application_status(user_id: int, job_id: int, db: Session = Depends(get_db)):
+    app_rec = db.query(JobApplication).filter_by(user_id=user_id, job_id=job_id).first()
+    if not app_rec:
+        return {"status": "Not Applied", "cover_letter": None}
+    return {
+        "status": app_rec.autopilot_status or "Agentic AI Triggered",
+        "cover_letter": app_rec.cover_letter
+    }
+
+
 
 @app.post("/api/jobs/apply")
 def apply_to_job(req: ApplyRequest, db: Session = Depends(get_db)):

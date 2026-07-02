@@ -42,24 +42,40 @@ export default function JobEcosystem() {
   };
 
 
-  // Poll live telemetry logs when modal is active
+  // Poll live telemetry logs and application status when modal is active
   useEffect(() => {
     if (!activeModalJob || !userId) return;
-    const fetchLogs = async () => {
+    const fetchStatusAndLogs = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/logs/latest?user_id=${userId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setAgentLogs(data.logs || []);
+        // 1. Fetch latest autopilot logs
+        const logsRes = await fetch(`${API_URL}/api/logs/latest?user_id=${userId}&level=AUTOPILOT`);
+        if (logsRes.ok) {
+          const logsData = await logsRes.json();
+          setAgentLogs(logsData.logs || []);
+        }
+
+        // 2. Fetch current application status
+        const statusRes = await fetch(`${API_URL}/api/jobs/application/status?user_id=${userId}&job_id=${activeModalJob.id}`);
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          setActiveModalJob((prev: any) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              status: statusData.status,
+              cover_letter: statusData.cover_letter || prev.cover_letter
+            };
+          });
         }
       } catch (e) {
-        console.error("Error polling logs:", e);
+        console.error("Error polling telemetry:", e);
       }
     };
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 2000);
+    fetchStatusAndLogs();
+    const interval = setInterval(fetchStatusAndLogs, 2000);
     return () => clearInterval(interval);
-  }, [activeModalJob, userId]);
+  }, [activeModalJob?.id, userId]);
+
 
   // Fetch the latest user profile on load so they don't have to re-upload (with retry)
 
