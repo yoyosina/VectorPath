@@ -143,11 +143,18 @@ def run_scout():
                         
             print(f"Scout Page {page_tracker}: Found {len(new_jobs)} relevant new jobs (relevance >= 1.5), skipped {skipped_count} irrelevant ones.")
             log_msg(db, user.id, "SCOUT", f"Page {page_tracker}: Found {len(new_jobs)} relevant jobs, skipped {skipped_count} irrelevant ones.")
-
             
-            # 5. Process new jobs via LLM in batches
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1).with_structured_output(BatchParsedJobs)
+            # Persist incremented page tracker immediately to prevent loop cycles on restarts
+            try:
+                with open(state_file, "w") as f:
+                    json.dump({"page_tracker": page_tracker + 1}, f)
+            except Exception as se:
+                print("Failed to save state file:", se)
+
+            # 5. Process new jobs via LLM in batches (using Groq for high-rate parsing headroom)
+            llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1).with_structured_output(BatchParsedJobs)
             user_skills = [Skill(**s) for s in user.skill_map]
+
             
             for i in range(0, len(new_jobs), 10): # Batch 10 at a time
                 batch = new_jobs[i:i+10]
@@ -264,25 +271,21 @@ def run_scout():
                     time.sleep(10)
                 except Exception as e:
                     print(f"LLM Batch Error: {e}")
-                    log_msg(db, user.id, "ERROR", f"LLM Batch Error: {str(e)[:40]}. Cooling down for 30 mins...")
-                    # Cool down for 30 minutes to let daily quotas reset and prevent self-inflicted API exhaustion
-                    time.sleep(1800)
+                    log_msg(db, user.id, "ERROR", f"LLM Batch Error: {str(e)[:40]}. Cooling down for 15s...")
+                    # Cool down for 15 seconds to let transient API window reset
+                    time.sleep(15)
                     continue
                     
             # 6. Finalize page
-            page_tracker += 1
-            try:
-                with open(state_file, "w") as f:
-                    json.dump({"page_tracker": page_tracker}, f)
-            except Exception as se:
-                print("Failed to save state file:", se)
             daemon.total_jobs_scraped = db.query(JobTarget).filter_by(user_id=user.id).count()
             daemon.last_error = None
             db.commit()
-
             
             print(f"Page processed. Total db jobs: {daemon.total_jobs_scraped}")
-            log_msg(db, user.id, "SYS", f"Page {page_tracker-1} complete. Database holding {daemon.total_jobs_scraped} jobs. Resting...")
+            log_msg(db, user.id, "SYS", f"Page {page_tracker} complete. Database holding {daemon.total_jobs_scraped} jobs. Resting...")
+            
+            # Increment local page tracker variable for next loop iteration
+            page_tracker += 1
             time.sleep(5) # brief pause between pages
             
         except Exception as e:
