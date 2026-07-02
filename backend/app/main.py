@@ -29,7 +29,21 @@ async def lifespan(app: FastAPI):
     print("Starting Web Scout background thread...")
     thread = threading.Thread(target=run_scout, daemon=True)
     thread.start()
+    
+    # Programmatically install Playwright Chromium on server startup
+    def install_playwright():
+        try:
+            import subprocess
+            import sys
+            print("Installing Playwright Chromium...")
+            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+            print("Playwright Chromium installed successfully!")
+        except Exception as e:
+            print("Failed to install Playwright Chromium programmatically:", e)
+
+    threading.Thread(target=install_playwright, daemon=True).start()
     yield
+
 
 app = FastAPI(title="VectorPath API", version="0.1.0", lifespan=lifespan)
 

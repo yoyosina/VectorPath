@@ -61,7 +61,7 @@ async def run_autonomous_application_async(user_id: int, job_id: int, cover_lett
                     db.commit()
                     
             except Exception as nav_err:
-                emit_agent_log(db, user_id, f"⚡ [AUTOPILOT] Simulated direct application fallback due to portal security: {str(nav_err)[:60]}")
+                emit_agent_log(db, user_id, f"⚡ [AUTOPILOT] Simulated direct application fallback due to portal security: {str(nav_err)[:250]}")
                 emit_agent_log(db, user_id, "✅ [AUTOPILOT] Application Packet & Cover Letter synthesized and logged for direct submission!")
                 app_record = db.query(JobApplication).filter_by(user_id=user_id, job_id=job_id).first()
                 if app_record:
@@ -72,7 +72,8 @@ async def run_autonomous_application_async(user_id: int, job_id: int, cover_lett
                 
     except Exception as err:
         print("Autopilot agent error:", err)
-        emit_agent_log(db, user_id, f"❌ [AUTOPILOT] Agent error: {str(err)[:50]}")
+        emit_agent_log(db, user_id, f"❌ [AUTOPILOT] Agent error: {str(err)[:250]}")
+
     finally:
         db.close()
 
