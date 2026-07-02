@@ -60,7 +60,17 @@ def strip_html(text):
 
 def run_scout():
     print("Starting Web Scout v2.0 (Direct API Pipeline)...")
+    state_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scout_state.json")
     page_tracker = 1
+    if os.path.exists(state_file):
+        try:
+            with open(state_file, "r") as f:
+                state_data = json.load(f)
+                page_tracker = state_data.get("page_tracker", 1)
+        except Exception as e:
+            print("Failed to read state file:", e)
+            page_tracker = 1
+
     
     while True:
         db: Session = SessionLocal()
@@ -261,9 +271,15 @@ def run_scout():
                     
             # 6. Finalize page
             page_tracker += 1
+            try:
+                with open(state_file, "w") as f:
+                    json.dump({"page_tracker": page_tracker}, f)
+            except Exception as se:
+                print("Failed to save state file:", se)
             daemon.total_jobs_scraped = db.query(JobTarget).filter_by(user_id=user.id).count()
             daemon.last_error = None
             db.commit()
+
             
             print(f"Page processed. Total db jobs: {daemon.total_jobs_scraped}")
             log_msg(db, user.id, "SYS", f"Page {page_tracker-1} complete. Database holding {daemon.total_jobs_scraped} jobs. Resting...")
