@@ -151,8 +151,7 @@ def run_scout():
             except Exception as se:
                 print("Failed to save state file:", se)
 
-            # 5. Process new jobs via LLM in batches (using Groq for high-rate parsing headroom)
-            llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1).with_structured_output(BatchParsedJobs)
+            # 5. Process new jobs via LLM in batches (with Groq/Gemini dual failover)
             user_skills = [Skill(**s) for s in user.skill_map]
 
             
@@ -164,14 +163,27 @@ def run_scout():
                     desc = strip_html(bj.get('description', ''))[:1000] # Use first 1000 chars for speed
                     prompt_text += f"ID: {idx}\nTitle: {bj.get('title')}\nTags: {bj.get('tags')}\nDesc: {desc}\n\n---\n\n"
                     
-                # Retry wrapper for LLM skill map extraction to handle 429 errors
+                # Retry wrapper for LLM skill map extraction to handle 429 errors with dual failover
                 extracted = None
                 for attempt in range(3):
                     try:
                         log_msg(db, user.id, "MATCH", f"Extracting skill maps for batch {int(i/10)+1} / {int(len(new_jobs)/10)+1} (attempt {attempt+1})...")
-                        extracted = llm.invoke(prompt_text)
+                        try:
+                            # Try Groq first
+                            groq_llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1).with_structured_output(BatchParsedJobs)
+                            extracted = groq_llm.invoke(prompt_text)
+                        except Exception as ge:
+                            if "429" in str(ge) or "rate" in str(ge).lower():
+                                log_msg(db, user.id, "WARN", "Groq rate limit hit during parse, falling back to Gemini...")
+                                print("Groq rate limit hit during parse, falling back to Gemini...")
+                                # Fall back to Gemini 2.5 Flash
+                                gemini_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1).with_structured_output(BatchParsedJobs)
+                                extracted = gemini_llm.invoke(prompt_text)
+                            else:
+                                raise ge
                         break
                     except Exception as e:
+
                         if ("429" in str(e) or "rate_limit" in str(e).lower()) and attempt < 2:
                             wait_time = (attempt + 1) * 10
                             log_msg(db, user.id, "WARN", f"Rate limit hit during batch parse. Sleeping for {wait_time}s...")

@@ -84,7 +84,15 @@ def ensemble_scores(state: GraphState) -> GraphState:
     gemini_score = state.get("gemini_score", 0.0)
     groq_score = state.get("groq_score", 0.0)
     
-    # Calculate final score: 60% weight to Gemini, 40% weight to Groq
-    final_score = (gemini_score * 0.60) + (groq_score * 0.40)
-    
+    # Calculate final score: 60% Gemini / 40% Groq, with full failover if one provider is rate-limited/failed
+    if gemini_score > 0 and groq_score > 0:
+        final_score = (gemini_score * 0.60) + (groq_score * 0.40)
+    elif gemini_score > 0:
+        final_score = gemini_score
+    elif groq_score > 0:
+        final_score = groq_score
+    else:
+        final_score = 0.0
+        
     return {"final_match_score": final_score, "status": "scoring_complete"}
+
